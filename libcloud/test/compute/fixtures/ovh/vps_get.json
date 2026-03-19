@@ -1,0 +1,1 @@
+{"name": "vps-abc123.vps.ovh.net", "displayName": "my-vps", "state": "running", "model": {"name": "VPS Value 1-2-40", "vcore": 1, "memory": 2048, "disk": 40, "offer": "value"}, "netbootMode": "local", "offerType": "ssd", "vcore": 1, "zone": "EU", "cluster": "cluster001.ovh.net", "keymap": "fr", "memoryLimit": 2048, "slaMonitoring": true, "ips": ["203.0.113.1", "2001:db8::1"]}

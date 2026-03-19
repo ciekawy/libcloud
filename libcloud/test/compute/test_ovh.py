@@ -149,6 +149,42 @@ class OvhMockHttp(BaseOvhMockHttp):
         body = self.fixtures.load("pricing_get.json")
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
+    # VPS mock endpoints
+
+    def _json_1_0_vps_get(self, method, url, body, headers):
+        body = self.fixtures.load("vps_list.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_get(self, method, url, body, headers):
+        body = self.fixtures.load("vps_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_def456_vps_ovh_net_get(self, method, url, body, headers):
+        body = self.fixtures.load("vps_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_reboot_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_start_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_stop_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_rebuild_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_get(
+        self, method, url, body, headers
+    ):
+        body = self.fixtures.load("vps_images.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
     def _json_1_0_cloud_project_project_id_instance_get_invalid_app_key_error(
         self, method, url, body, headers
     ):
@@ -304,6 +340,52 @@ class OvhTests(unittest.TestCase):
 
     def test_get_pricing(self):
         self.driver.ex_get_pricing("foo-id")
+
+    # VPS tests
+
+    def test_ex_list_vps(self):
+        nodes = self.driver.ex_list_vps()
+        self.assertEqual(len(nodes), 2)
+        node = nodes[0]
+        self.assertEqual(node.id, "vps-abc123.vps.ovh.net")
+        self.assertEqual(node.name, "my-vps")
+        self.assertEqual(node.state, "running")
+        self.assertEqual(len(node.public_ips), 2)
+        self.assertIn("203.0.113.1", node.public_ips)
+
+    def test_ex_get_vps(self):
+        node = self.driver.ex_get_vps("vps-abc123.vps.ovh.net")
+        self.assertEqual(node.id, "vps-abc123.vps.ovh.net")
+        self.assertEqual(node.name, "my-vps")
+        self.assertEqual(node.state, "running")
+        self.assertEqual(node.public_ips, ["203.0.113.1", "2001:db8::1"])
+        self.assertIn("model", node.extra)
+        self.assertEqual(node.extra["vcore"], 1)
+
+    def test_ex_reboot_vps(self):
+        result = self.driver.ex_reboot_vps("vps-abc123.vps.ovh.net")
+        self.assertTrue(result)
+
+    def test_ex_start_vps(self):
+        result = self.driver.ex_start_vps("vps-abc123.vps.ovh.net")
+        self.assertTrue(result)
+
+    def test_ex_stop_vps(self):
+        result = self.driver.ex_stop_vps("vps-abc123.vps.ovh.net")
+        self.assertTrue(result)
+
+    def test_ex_rebuild_vps(self):
+        result = self.driver.ex_rebuild_vps(
+            "vps-abc123.vps.ovh.net", "img-ubuntu-2204", ssh_key="ssh-rsa AAAA..."
+        )
+        self.assertTrue(result)
+
+    def test_ex_list_vps_images(self):
+        images = self.driver.ex_list_vps_images("vps-abc123.vps.ovh.net")
+        self.assertEqual(len(images), 2)
+        self.assertEqual(images[0].id, "img-ubuntu-2204")
+        self.assertEqual(images[0].name, "Ubuntu 22.04")
+        self.assertEqual(images[1].id, "img-debian-12")
 
 
 if __name__ == "__main__":

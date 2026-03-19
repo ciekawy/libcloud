@@ -26,7 +26,7 @@ from libcloud.compute.base import (
     StorageVolume,
     VolumeSnapshot,
 )
-from libcloud.compute.types import Provider, StorageVolumeState, VolumeSnapshotState
+from libcloud.compute.types import NodeState, Provider, StorageVolumeState, VolumeSnapshotState
 from libcloud.compute.drivers.openstack import OpenStackKeyPair, OpenStackNodeDriver
 
 
@@ -49,6 +49,16 @@ class OvhNodeDriver(NodeDriver):
     NODE_STATE_MAP = OpenStackNodeDriver.NODE_STATE_MAP
     VOLUME_STATE_MAP = OpenStackNodeDriver.VOLUME_STATE_MAP
     SNAPSHOT_STATE_MAP = OpenStackNodeDriver.SNAPSHOT_STATE_MAP
+
+    VPS_STATE_MAP = {
+        "running": NodeState.RUNNING,
+        "stopped": NodeState.STOPPED,
+        "installing": NodeState.PENDING,
+        "maintenance": NodeState.PENDING,
+        "rebooting": NodeState.REBOOTING,
+        "stopping": NodeState.STOPPING,
+        "rescued": NodeState.PENDING,
+    }
 
     def __init__(self, key, secret, ex_project_id, ex_consumer_key=None, region=None):
         """
@@ -516,6 +526,145 @@ class OvhNodeDriver(NodeDriver):
             "hourly": pricing["price"]["value"],
             "monthly": pricing["monthlyPrice"]["value"],
         }
+
+    def ex_list_vps(self):
+        """
+        List all VPS on the account.
+
+        :return: List of VPS nodes
+        :rtype: ``list`` of :class:`Node`
+        """
+        action = "%s/vps" % API_ROOT
+        response = self.connection.request(action)
+        nodes = []
+        for name in response.object:
+            nodes.append(self.ex_get_vps(name))
+        return nodes
+
+    def ex_get_vps(self, name):
+        """
+        Get a VPS by its name.
+
+        :param name: VPS name (e.g. ``vps-abc123.vps.ovh.net``)
+        :type name: ``str``
+
+        :return: VPS node
+        :rtype: :class:`Node`
+        """
+        action = "%s/vps/%s" % (API_ROOT, name)
+        response = self.connection.request(action)
+        return self._to_vps_node(response.object)
+
+    def ex_reboot_vps(self, name):
+        """
+        Reboot a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/reboot" % (API_ROOT, name)
+        self.connection.request(action, method="POST")
+        return True
+
+    def ex_start_vps(self, name):
+        """
+        Start a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/start" % (API_ROOT, name)
+        self.connection.request(action, method="POST")
+        return True
+
+    def ex_stop_vps(self, name):
+        """
+        Stop a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/stop" % (API_ROOT, name)
+        self.connection.request(action, method="POST")
+        return True
+
+    def ex_rebuild_vps(self, name, image_id, ssh_key=None):
+        """
+        Reinstall a VPS with a new OS image.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :param image_id: OS image ID to install
+        :type image_id: ``str``
+
+        :param ssh_key: SSH public key to install (optional)
+        :type ssh_key: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/rebuild" % (API_ROOT, name)
+        data = {"imageId": image_id}
+        if ssh_key:
+            data["sshKey"] = ssh_key
+        self.connection.request(action, data=data, method="POST")
+        return True
+
+    def ex_list_vps_images(self, name):
+        """
+        List available OS images for a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: List of available images
+        :rtype: ``list`` of :class:`NodeImage`
+        """
+        action = "%s/vps/%s/images/available" % (API_ROOT, name)
+        response = self.connection.request(action)
+        return [self._to_vps_image(obj) for obj in response.object]
+
+    def _to_vps_node(self, obj):
+        extra = {}
+        for key in ("model", "netbootMode", "offerType", "vcore", "zone",
+                     "monitoringIpBlocks", "cluster", "keymap", "memoryLimit",
+                     "slaMonitoring"):
+            if key in obj:
+                extra[key] = obj[key]
+
+        public_ips = []
+        if obj.get("ips"):
+            public_ips = obj["ips"]
+
+        state = self.VPS_STATE_MAP.get(obj.get("state", ""), NodeState.UNKNOWN)
+
+        return Node(
+            id=obj["name"],
+            name=obj.get("displayName") or obj["name"],
+            state=state,
+            public_ips=public_ips,
+            private_ips=[],
+            driver=self,
+            extra=extra,
+        )
+
+    def _to_vps_image(self, obj):
+        return NodeImage(
+            id=obj["id"],
+            name=obj.get("name", obj["id"]),
+            driver=self,
+            extra={k: v for k, v in obj.items() if k not in ("id", "name")},
+        )
 
     def _to_volume(self, obj):
         extra = obj.copy()
