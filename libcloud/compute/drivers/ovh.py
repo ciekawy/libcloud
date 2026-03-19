@@ -597,7 +597,7 @@ class OvhNodeDriver(NodeDriver):
         self.connection.request(action, method="POST")
         return True
 
-    def ex_rebuild_vps(self, name, image_id, ssh_key=None):
+    def ex_rebuild_vps(self, name, image_id, ssh_key_name=None):
         """
         Reinstall a VPS with a new OS image.
 
@@ -607,16 +607,18 @@ class OvhNodeDriver(NodeDriver):
         :param image_id: OS image ID to install
         :type image_id: ``str``
 
-        :param ssh_key: SSH public key to install (optional)
-        :type ssh_key: ``str``
+        :param ssh_key_name: Name of an SSH key registered in your OVH
+            account (via ``/me/sshKey``). The key will be installed in the
+            default user's ``authorized_keys``. (optional)
+        :type ssh_key_name: ``str``
 
         :return: True on success
         :rtype: ``bool``
         """
         action = "%s/vps/%s/rebuild" % (API_ROOT, name)
         data = {"imageId": image_id}
-        if ssh_key:
-            data["sshKey"] = ssh_key
+        if ssh_key_name:
+            data["sshKey"] = ssh_key_name
         self.connection.request(action, data=data, method="POST")
         return True
 
@@ -632,7 +634,12 @@ class OvhNodeDriver(NodeDriver):
         """
         action = "%s/vps/%s/images/available" % (API_ROOT, name)
         response = self.connection.request(action)
-        return [self._to_vps_image(obj) for obj in response.object]
+        images = []
+        for image_id in response.object:
+            detail_action = "%s/vps/%s/images/available/%s" % (API_ROOT, name, image_id)
+            detail = self.connection.request(detail_action)
+            images.append(self._to_vps_image(detail.object))
+        return images
 
     def _to_vps_node(self, obj):
         extra = {}

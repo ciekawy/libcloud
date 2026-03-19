@@ -185,6 +185,18 @@ class OvhMockHttp(BaseOvhMockHttp):
         body = self.fixtures.load("vps_images.json")
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_img_ubuntu_2204_get(
+        self, method, url, body, headers
+    ):
+        body = self.fixtures.load("vps_image_detail_1.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_img_debian_12_get(
+        self, method, url, body, headers
+    ):
+        body = self.fixtures.load("vps_image_detail_2.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
     def _json_1_0_cloud_project_project_id_instance_get_invalid_app_key_error(
         self, method, url, body, headers
     ):
@@ -376,7 +388,7 @@ class OvhTests(unittest.TestCase):
 
     def test_ex_rebuild_vps(self):
         result = self.driver.ex_rebuild_vps(
-            "vps-abc123.vps.ovh.net", "img-ubuntu-2204", ssh_key="ssh-rsa AAAA..."
+            "vps-abc123.vps.ovh.net", "img-ubuntu-2204", ssh_key_name="my-deploy-key"
         )
         self.assertTrue(result)
 
