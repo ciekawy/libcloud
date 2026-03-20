@@ -15,6 +15,8 @@
 """
 Ovh driver
 """
+from urllib.parse import quote
+
 from libcloud.utils.py3 import httplib
 from libcloud.common.ovh import API_ROOT, OvhConnection
 from libcloud.compute.base import (
@@ -620,6 +622,40 @@ class OvhNodeDriver(NodeDriver):
         if ssh_key_name:
             data["sshKey"] = ssh_key_name
         self.connection.request(action, data=data, method="POST")
+        return True
+
+    def ex_list_account_ssh_keys(self):
+        """
+        List SSH keys registered on the OVH account (``/me/sshKey``).
+
+        :return: List of ``(key_name, public_key)`` tuples
+        :rtype: ``list`` of ``tuple``
+        """
+        action = "%s/me/sshKey" % API_ROOT
+        names = self.connection.request(action).object
+        result = []
+        for name in names:
+            detail = self.connection.request(
+                "%s/me/sshKey/%s" % (API_ROOT, quote(name, safe=""))
+            ).object
+            result.append((detail["keyName"], detail.get("key", "")))
+        return result
+
+    def ex_add_account_ssh_key(self, key_name, public_key):
+        """
+        Register a new SSH public key on the OVH account (``/me/sshKey``).
+
+        :param key_name: Name to register the key under
+        :type key_name: ``str``
+
+        :param public_key: SSH public key material
+        :type public_key: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/me/sshKey" % API_ROOT
+        self.connection.request(action, data={"keyName": key_name, "key": public_key}, method="POST")
         return True
 
     def ex_list_vps_images(self, name):
