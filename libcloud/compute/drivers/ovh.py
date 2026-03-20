@@ -610,8 +610,11 @@ class OvhNodeDriver(NodeDriver):
         :type image_id: ``str``
 
         :param ssh_key_name: Name of an SSH key registered in your OVH
-            account (via ``/me/sshKey``). The key will be installed in the
-            default user's ``authorized_keys``. (optional)
+            account (via ``/me/sshKey``). The public key content will be
+            fetched and passed as ``publicSshKey`` in the rebuild request.
+            Note: the ``sshKey`` field (key name reference) is silently
+            ignored by the OVH VPS API; only ``publicSshKey`` (raw content)
+            is honoured. (optional)
         :type ssh_key_name: ``str``
 
         :return: True on success
@@ -620,9 +623,29 @@ class OvhNodeDriver(NodeDriver):
         action = "%s/vps/%s/rebuild" % (API_ROOT, name)
         data = {"imageId": image_id}
         if ssh_key_name:
-            data["sshKey"] = ssh_key_name
+            pub_key = self._get_account_ssh_key_content(ssh_key_name)
+            data["publicSshKey"] = pub_key
         self.connection.request(action, data=data, method="POST")
         return True
+
+    def _get_account_ssh_key_content(self, key_name):
+        """
+        Fetch the public key content for a named SSH key from ``/me/sshKey``.
+
+        :param key_name: Key name as registered in the OVH account
+        :type key_name: ``str``
+
+        :return: Public key material
+        :rtype: ``str``
+
+        :raises: Exception if the key is not found
+        """
+        detail = self.connection.request(
+            "%s/me/sshKey/%s" % (API_ROOT, quote(key_name, safe=""))
+        ).object
+        if "key" not in detail:
+            raise Exception("SSH key '%s' not found on OVH account" % key_name)
+        return detail["key"]
 
     def ex_list_account_ssh_keys(self):
         """
