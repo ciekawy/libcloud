@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import sys
 import unittest
 from unittest.mock import patch
@@ -176,6 +177,7 @@ class OvhMockHttp(BaseOvhMockHttp):
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
     def _json_1_0_vps_vps_abc123_vps_ovh_net_rebuild_post(self, method, url, body, headers):
+        OvhMockHttp.last_rebuild_body = json.loads(body)
         body = self.fixtures.load("vps_task.json")
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
@@ -391,6 +393,9 @@ class OvhTests(unittest.TestCase):
             "vps-abc123.vps.ovh.net", "img-ubuntu-2204", ssh_key_name="my-deploy-key"
         )
         self.assertTrue(result)
+        mock = OvhMockHttp
+        self.assertEqual(mock.last_rebuild_body["imageId"], "img-ubuntu-2204")
+        self.assertEqual(mock.last_rebuild_body["sshKey"], "my-deploy-key")
 
     def test_ex_list_vps_images(self):
         images = self.driver.ex_list_vps_images("vps-abc123.vps.ovh.net")

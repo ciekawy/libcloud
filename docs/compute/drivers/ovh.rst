@@ -72,7 +72,7 @@ provider-specific extensions):
 * ``ex_reboot_vps(name)`` - Reboot a VPS
 * ``ex_start_vps(name)`` - Start a stopped VPS
 * ``ex_stop_vps(name)`` - Stop a running VPS
-* ``ex_rebuild_vps(name, image_id, ssh_key)`` - Reinstall OS on a VPS
+* ``ex_rebuild_vps(name, image_id, ssh_key_name)`` - Reinstall OS on a VPS
 * ``ex_list_vps_images(name)`` - List available OS images for a VPS
 
 VPS nodes are returned as standard ``Node`` objects. The VPS name (e.g.
