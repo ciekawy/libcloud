@@ -181,6 +181,23 @@ class OvhMockHttp(BaseOvhMockHttp):
         body = self.fixtures.load("vps_task.json")
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
+    def _json_1_0_me_sshKey_get(self, method, url, body, headers):
+        body = self.fixtures.load("me_sshkey_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_my_deploy_key_get(self, method, url, body, headers):
+        body = self.fixtures.load("me_sshkey_my_deploy_key_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_other_key_get(self, method, url, body, headers):
+        body = self.fixtures.load("me_sshkey_my_deploy_key_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_post(self, method, url, body, headers):
+        OvhMockHttp.last_sshkey_post_body = json.loads(body)
+        body = self.fixtures.load("me_sshkey_my_deploy_key_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
     def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_get(
         self, method, url, body, headers
     ):
@@ -395,7 +412,30 @@ class OvhTests(unittest.TestCase):
         self.assertTrue(result)
         mock = OvhMockHttp
         self.assertEqual(mock.last_rebuild_body["imageId"], "img-ubuntu-2204")
-        self.assertEqual(mock.last_rebuild_body["sshKey"], "my-deploy-key")
+        # OVH VPS API silently ignores sshKey (name); publicSshKey (content) must be used
+        self.assertIn("publicSshKey", mock.last_rebuild_body)
+        self.assertNotIn("sshKey", mock.last_rebuild_body)
+        self.assertIn("ssh-ed25519", mock.last_rebuild_body["publicSshKey"])
+
+    def test_ex_rebuild_vps_no_ssh_key(self):
+        result = self.driver.ex_rebuild_vps("vps-abc123.vps.ovh.net", "img-ubuntu-2204")
+        self.assertTrue(result)
+        self.assertEqual(OvhMockHttp.last_rebuild_body, {"imageId": "img-ubuntu-2204"})
+
+    def test_ex_list_account_ssh_keys(self):
+        keys = self.driver.ex_list_account_ssh_keys()
+        self.assertEqual(len(keys), 2)
+        names = [k[0] for k in keys]
+        self.assertIn("my-deploy-key", names)
+        key_content = dict(keys)["my-deploy-key"]
+        self.assertIn("ssh-ed25519", key_content)
+
+    def test_ex_add_account_ssh_key(self):
+        pub_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINew newkey@example.com"
+        result = self.driver.ex_add_account_ssh_key("my-deploy-key", pub_key)
+        self.assertTrue(result)
+        self.assertEqual(OvhMockHttp.last_sshkey_post_body["keyName"], "my-deploy-key")
+        self.assertEqual(OvhMockHttp.last_sshkey_post_body["key"], pub_key)
 
     def test_ex_list_vps_images(self):
         images = self.driver.ex_list_vps_images("vps-abc123.vps.ovh.net")
