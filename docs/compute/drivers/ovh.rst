@@ -57,6 +57,32 @@ example.
 
 Now you have and can use you credentials with Libcloud.
 
+VPS Support
+-----------
+
+In addition to Public Cloud instances, the OVH driver supports managing OVH VPS
+(Virtual Private Servers) through the ``/vps/`` API. VPS is a separate, cheaper
+product line from OVH that uses a proprietary API rather than OpenStack.
+
+All VPS methods use the ``ex_`` prefix (Libcloud convention for
+provider-specific extensions):
+
+* ``ex_list_vps()`` - List all VPS on the account
+* ``ex_get_vps(name)`` - Get VPS details as a Node
+* ``ex_reboot_vps(name)`` - Reboot a VPS
+* ``ex_start_vps(name)`` - Start a stopped VPS
+* ``ex_stop_vps(name)`` - Stop a running VPS
+* ``ex_rebuild_vps(name, image_id, ssh_key_name)`` - Reinstall OS on a VPS
+* ``ex_list_vps_images(name)`` - List available OS images for a VPS
+
+VPS nodes are returned as standard ``Node`` objects. The VPS name (e.g.
+``vps-abc123.vps.ovh.net``) is used as the node ID.
+
+.. note::
+
+    VPS methods do not require a ``project_id`` — only the application key,
+    secret, and consumer key are needed.
+
 Examples
 --------
 

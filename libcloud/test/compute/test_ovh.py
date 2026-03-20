@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import sys
 import unittest
 from unittest.mock import patch
@@ -147,6 +148,72 @@ class OvhMockHttp(BaseOvhMockHttp):
         self, method, url, body, headers
     ):
         body = self.fixtures.load("pricing_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    # VPS mock endpoints
+
+    def _json_1_0_vps_get(self, method, url, body, headers):
+        body = self.fixtures.load("vps_list.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_get(self, method, url, body, headers):
+        body = self.fixtures.load("vps_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_def456_vps_ovh_net_get(self, method, url, body, headers):
+        body = self.fixtures.load("vps_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_reboot_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_start_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_stop_post(self, method, url, body, headers):
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_rebuild_post(self, method, url, body, headers):
+        OvhMockHttp.last_rebuild_body = json.loads(body)
+        body = self.fixtures.load("vps_task.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_get(self, method, url, body, headers):
+        body = self.fixtures.load("me_sshkey_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_my_deploy_key_get(self, method, url, body, headers):
+        body = self.fixtures.load("me_sshkey_my_deploy_key_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_other_key_get(self, method, url, body, headers):
+        body = self.fixtures.load("me_sshkey_my_deploy_key_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_me_sshKey_post(self, method, url, body, headers):
+        OvhMockHttp.last_sshkey_post_body = json.loads(body)
+        body = self.fixtures.load("me_sshkey_my_deploy_key_get.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_get(
+        self, method, url, body, headers
+    ):
+        body = self.fixtures.load("vps_images.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_img_ubuntu_2204_get(
+        self, method, url, body, headers
+    ):
+        body = self.fixtures.load("vps_image_detail_1.json")
+        return (httplib.OK, body, {}, httplib.responses[httplib.OK])
+
+    def _json_1_0_vps_vps_abc123_vps_ovh_net_images_available_img_debian_12_get(
+        self, method, url, body, headers
+    ):
+        body = self.fixtures.load("vps_image_detail_2.json")
         return (httplib.OK, body, {}, httplib.responses[httplib.OK])
 
     def _json_1_0_cloud_project_project_id_instance_get_invalid_app_key_error(
@@ -304,6 +371,78 @@ class OvhTests(unittest.TestCase):
 
     def test_get_pricing(self):
         self.driver.ex_get_pricing("foo-id")
+
+    # VPS tests
+
+    def test_ex_list_vps(self):
+        nodes = self.driver.ex_list_vps()
+        self.assertEqual(len(nodes), 2)
+        node = nodes[0]
+        self.assertEqual(node.id, "vps-abc123.vps.ovh.net")
+        self.assertEqual(node.name, "my-vps")
+        self.assertEqual(node.state, "running")
+        self.assertEqual(len(node.public_ips), 2)
+        self.assertIn("203.0.113.1", node.public_ips)
+
+    def test_ex_get_vps(self):
+        node = self.driver.ex_get_vps("vps-abc123.vps.ovh.net")
+        self.assertEqual(node.id, "vps-abc123.vps.ovh.net")
+        self.assertEqual(node.name, "my-vps")
+        self.assertEqual(node.state, "running")
+        self.assertEqual(node.public_ips, ["203.0.113.1", "2001:db8::1"])
+        self.assertIn("model", node.extra)
+        self.assertEqual(node.extra["vcore"], 1)
+
+    def test_ex_reboot_vps(self):
+        result = self.driver.ex_reboot_vps("vps-abc123.vps.ovh.net")
+        self.assertTrue(result)
+
+    def test_ex_start_vps(self):
+        result = self.driver.ex_start_vps("vps-abc123.vps.ovh.net")
+        self.assertTrue(result)
+
+    def test_ex_stop_vps(self):
+        result = self.driver.ex_stop_vps("vps-abc123.vps.ovh.net")
+        self.assertTrue(result)
+
+    def test_ex_rebuild_vps(self):
+        result = self.driver.ex_rebuild_vps(
+            "vps-abc123.vps.ovh.net", "img-ubuntu-2204", ssh_key_name="my-deploy-key"
+        )
+        self.assertTrue(result)
+        mock = OvhMockHttp
+        self.assertEqual(mock.last_rebuild_body["imageId"], "img-ubuntu-2204")
+        # OVH VPS API silently ignores sshKey (name); publicSshKey (content) must be used
+        self.assertIn("publicSshKey", mock.last_rebuild_body)
+        self.assertNotIn("sshKey", mock.last_rebuild_body)
+        self.assertIn("ssh-ed25519", mock.last_rebuild_body["publicSshKey"])
+
+    def test_ex_rebuild_vps_no_ssh_key(self):
+        result = self.driver.ex_rebuild_vps("vps-abc123.vps.ovh.net", "img-ubuntu-2204")
+        self.assertTrue(result)
+        self.assertEqual(OvhMockHttp.last_rebuild_body, {"imageId": "img-ubuntu-2204"})
+
+    def test_ex_list_account_ssh_keys(self):
+        keys = self.driver.ex_list_account_ssh_keys()
+        self.assertEqual(len(keys), 2)
+        names = [k[0] for k in keys]
+        self.assertIn("my-deploy-key", names)
+        key_content = dict(keys)["my-deploy-key"]
+        self.assertIn("ssh-ed25519", key_content)
+
+    def test_ex_add_account_ssh_key(self):
+        pub_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINew newkey@example.com"
+        result = self.driver.ex_add_account_ssh_key("my-deploy-key", pub_key)
+        self.assertTrue(result)
+        self.assertEqual(OvhMockHttp.last_sshkey_post_body["keyName"], "my-deploy-key")
+        self.assertEqual(OvhMockHttp.last_sshkey_post_body["key"], pub_key)
+
+    def test_ex_list_vps_images(self):
+        images = self.driver.ex_list_vps_images("vps-abc123.vps.ovh.net")
+        self.assertEqual(len(images), 2)
+        self.assertEqual(images[0].id, "img-ubuntu-2204")
+        self.assertEqual(images[0].name, "Ubuntu 22.04")
+        self.assertEqual(images[1].id, "img-debian-12")
 
 
 if __name__ == "__main__":

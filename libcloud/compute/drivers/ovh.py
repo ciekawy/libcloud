@@ -15,6 +15,8 @@
 """
 Ovh driver
 """
+from urllib.parse import quote
+
 from libcloud.utils.py3 import httplib
 from libcloud.common.ovh import API_ROOT, OvhConnection
 from libcloud.compute.base import (
@@ -26,7 +28,7 @@ from libcloud.compute.base import (
     StorageVolume,
     VolumeSnapshot,
 )
-from libcloud.compute.types import Provider, StorageVolumeState, VolumeSnapshotState
+from libcloud.compute.types import NodeState, Provider, StorageVolumeState, VolumeSnapshotState
 from libcloud.compute.drivers.openstack import OpenStackKeyPair, OpenStackNodeDriver
 
 
@@ -49,6 +51,16 @@ class OvhNodeDriver(NodeDriver):
     NODE_STATE_MAP = OpenStackNodeDriver.NODE_STATE_MAP
     VOLUME_STATE_MAP = OpenStackNodeDriver.VOLUME_STATE_MAP
     SNAPSHOT_STATE_MAP = OpenStackNodeDriver.SNAPSHOT_STATE_MAP
+
+    VPS_STATE_MAP = {
+        "running": NodeState.RUNNING,
+        "stopped": NodeState.STOPPED,
+        "installing": NodeState.PENDING,
+        "maintenance": NodeState.PENDING,
+        "rebooting": NodeState.REBOOTING,
+        "stopping": NodeState.STOPPING,
+        "rescued": NodeState.PENDING,
+    }
 
     def __init__(self, key, secret, ex_project_id, ex_consumer_key=None, region=None):
         """
@@ -516,6 +528,209 @@ class OvhNodeDriver(NodeDriver):
             "hourly": pricing["price"]["value"],
             "monthly": pricing["monthlyPrice"]["value"],
         }
+
+    def ex_list_vps(self):
+        """
+        List all VPS on the account.
+
+        :return: List of VPS nodes
+        :rtype: ``list`` of :class:`Node`
+        """
+        action = "%s/vps" % API_ROOT
+        response = self.connection.request(action)
+        nodes = []
+        for name in response.object:
+            nodes.append(self.ex_get_vps(name))
+        return nodes
+
+    def ex_get_vps(self, name):
+        """
+        Get a VPS by its name.
+
+        :param name: VPS name (e.g. ``vps-abc123.vps.ovh.net``)
+        :type name: ``str``
+
+        :return: VPS node
+        :rtype: :class:`Node`
+        """
+        action = "%s/vps/%s" % (API_ROOT, name)
+        response = self.connection.request(action)
+        return self._to_vps_node(response.object)
+
+    def ex_reboot_vps(self, name):
+        """
+        Reboot a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/reboot" % (API_ROOT, name)
+        self.connection.request(action, method="POST")
+        return True
+
+    def ex_start_vps(self, name):
+        """
+        Start a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/start" % (API_ROOT, name)
+        self.connection.request(action, method="POST")
+        return True
+
+    def ex_stop_vps(self, name):
+        """
+        Stop a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/stop" % (API_ROOT, name)
+        self.connection.request(action, method="POST")
+        return True
+
+    def ex_rebuild_vps(self, name, image_id, ssh_key_name=None):
+        """
+        Reinstall a VPS with a new OS image.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :param image_id: OS image ID to install
+        :type image_id: ``str``
+
+        :param ssh_key_name: Name of an SSH key registered in your OVH
+            account (via ``/me/sshKey``). The public key content will be
+            fetched and passed as ``publicSshKey`` in the rebuild request.
+            Note: the ``sshKey`` field (key name reference) is silently
+            ignored by the OVH VPS API; only ``publicSshKey`` (raw content)
+            is honoured. (optional)
+        :type ssh_key_name: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/vps/%s/rebuild" % (API_ROOT, name)
+        data = {"imageId": image_id}
+        if ssh_key_name:
+            pub_key = self._get_account_ssh_key_content(ssh_key_name)
+            data["publicSshKey"] = pub_key
+        self.connection.request(action, data=data, method="POST")
+        return True
+
+    def _get_account_ssh_key_content(self, key_name):
+        """
+        Fetch the public key content for a named SSH key from ``/me/sshKey``.
+
+        :param key_name: Key name as registered in the OVH account
+        :type key_name: ``str``
+
+        :return: Public key material
+        :rtype: ``str``
+
+        :raises: Exception if the key is not found
+        """
+        detail = self.connection.request(
+            "%s/me/sshKey/%s" % (API_ROOT, quote(key_name, safe=""))
+        ).object
+        if "key" not in detail:
+            raise Exception("SSH key '%s' not found on OVH account" % key_name)
+        return detail["key"]
+
+    def ex_list_account_ssh_keys(self):
+        """
+        List SSH keys registered on the OVH account (``/me/sshKey``).
+
+        :return: List of ``(key_name, public_key)`` tuples
+        :rtype: ``list`` of ``tuple``
+        """
+        action = "%s/me/sshKey" % API_ROOT
+        names = self.connection.request(action).object
+        result = []
+        for name in names:
+            detail = self.connection.request(
+                "%s/me/sshKey/%s" % (API_ROOT, quote(name, safe=""))
+            ).object
+            result.append((detail["keyName"], detail.get("key", "")))
+        return result
+
+    def ex_add_account_ssh_key(self, key_name, public_key):
+        """
+        Register a new SSH public key on the OVH account (``/me/sshKey``).
+
+        :param key_name: Name to register the key under
+        :type key_name: ``str``
+
+        :param public_key: SSH public key material
+        :type public_key: ``str``
+
+        :return: True on success
+        :rtype: ``bool``
+        """
+        action = "%s/me/sshKey" % API_ROOT
+        self.connection.request(action, data={"keyName": key_name, "key": public_key}, method="POST")
+        return True
+
+    def ex_list_vps_images(self, name):
+        """
+        List available OS images for a VPS.
+
+        :param name: VPS name
+        :type name: ``str``
+
+        :return: List of available images
+        :rtype: ``list`` of :class:`NodeImage`
+        """
+        action = "%s/vps/%s/images/available" % (API_ROOT, name)
+        response = self.connection.request(action)
+        images = []
+        for image_id in response.object:
+            detail_action = "%s/vps/%s/images/available/%s" % (API_ROOT, name, image_id)
+            detail = self.connection.request(detail_action)
+            images.append(self._to_vps_image(detail.object))
+        return images
+
+    def _to_vps_node(self, obj):
+        extra = {}
+        for key in ("model", "netbootMode", "offerType", "vcore", "zone",
+                     "monitoringIpBlocks", "cluster", "keymap", "memoryLimit",
+                     "slaMonitoring"):
+            if key in obj:
+                extra[key] = obj[key]
+
+        public_ips = []
+        if obj.get("ips"):
+            public_ips = obj["ips"]
+
+        state = self.VPS_STATE_MAP.get(obj.get("state", ""), NodeState.UNKNOWN)
+
+        return Node(
+            id=obj["name"],
+            name=obj.get("displayName") or obj["name"],
+            state=state,
+            public_ips=public_ips,
+            private_ips=[],
+            driver=self,
+            extra=extra,
+        )
+
+    def _to_vps_image(self, obj):
+        return NodeImage(
+            id=obj["id"],
+            name=obj.get("name", obj["id"]),
+            driver=self,
+            extra={k: v for k, v in obj.items() if k not in ("id", "name")},
+        )
 
     def _to_volume(self, obj):
         extra = obj.copy()
